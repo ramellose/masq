@@ -186,7 +186,6 @@ class ParentConnection:
                         "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
                         ");"
         meta_query = "CREATE TABLE IF NOT EXISTS meta (" \
-                     "metaID INTEGER PRIMARY KEY," \
                      "sampleID varchar," \
                      "studyID varchar," \
                      "property varchar," \

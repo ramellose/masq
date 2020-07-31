@@ -89,6 +89,7 @@ class IoConnection(ParentConnection):
             else:
                 edge_values.append((network_id, edge[0], edge[1], None))
         self.value_query(edge_query, edge_values)
+        logger.info("Uploaded network data for " + name + ".\n")
         return network_id
 
 

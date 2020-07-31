@@ -96,6 +96,9 @@ class BiomConnection(ParentConnection):
         sample_values = list()
         meta_values = list()
         obs_values = list()
+        for sample in samples:
+            values = list()
+            sample_values.append((sample, name))
         for tax in taxa:
             taxonomy = biomfile.metadata(id=tax, axis='observation')['taxonomy']
             values = [tax, name]
@@ -107,8 +110,6 @@ class BiomConnection(ParentConnection):
             data = biomfile.data(id=tax, axis='observation')
             for sample in samples:
                 sample_data = biomfile.metadata(id=sample, axis='sample')
-                values = list()
-                sample_values.append((sample, name))
                 values = list()
                 if sample_data:
                     for property in sample_data:
@@ -133,6 +134,7 @@ class BiomConnection(ParentConnection):
         self.add_sample(sample_values)
         self.add_meta(meta_values)
         self.add_observation(obs_values)
+        logger.info("Uploaded BIOM data for " + name +".\n")
 
     def add_summary(self, values):
         """
