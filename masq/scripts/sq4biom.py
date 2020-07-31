@@ -123,9 +123,7 @@ class BiomConnection(ParentConnection):
                             value.append(sample_data[property])
                             value.append(None)
                         values.append(tuple(value))
-                else:
-                    values = [(sample, name, None, None, None)]
-                meta_values.extend(values)
+                    meta_values.extend(values)
                 count_index = biomfile.index(sample, axis='sample')
                 count = data[count_index]
                 values = name, tax, sample, count
