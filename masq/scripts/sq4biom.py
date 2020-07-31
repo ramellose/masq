@@ -141,9 +141,9 @@ class BiomConnection(ParentConnection):
         :param values: List of tuples for bioms table
         :return:
         """
-        counts_query = "INSERT INTO bioms (studyID,tax_num,sample_num) " \
+        biom_query = "INSERT INTO bioms (studyID,tax_num,sample_num) " \
                        "VALUES (%s,%s,%s)"
-        self.value_query(counts_query, values)
+        self.value_query(biom_query, values)
 
     def add_taxon(self, values):
         """
