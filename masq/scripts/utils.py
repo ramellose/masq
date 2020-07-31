@@ -140,15 +140,20 @@ class ParentConnection:
         Adds the default data entities.
         :return:
         """
+        biom_query = "CREATE TABLE IF NOT EXISTS bioms (" \
+                     "studyID varchar PRIMARY KEY," \
+                     "tax_num int," \
+                     "sample_num int" \
+                     ");"
         network_query = "CREATE TABLE IF NOT EXISTS networks (" \
-                        "studyID INTEGER PRIMARY KEY," \
-                        "name varchar," \
+                        "studyID varchar PRIMARY KEY," \
                         "node_num int," \
                         "edge_num int," \
-                        "UNIQUE(name)" \
+                        "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
                         ");"
         tax_query = "CREATE TABLE IF NOT EXISTS taxonomy (" \
-                    "taxon varchar," \
+                    "taxon varchar PRIMARY KEY," \
+                    "studyID varchar," \
                     "Kingdom varchar," \
                     "Phylum varchar," \
                     "Class varchar," \
@@ -156,17 +161,16 @@ class ParentConnection:
                     "Family varchar," \
                     "Genus varchar," \
                     "Species varchar," \
-                    "PRIMARY KEY (Taxon)" \
+                    "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
                     ");"
         edge_query = "CREATE TABLE IF NOT EXISTS edges (" \
-                     "edgeID INTEGER PRIMARY KEY," \
-                     "studyID int," \
+                     "studyID varchar," \
                      "source varchar NOT NULL," \
                      "target varchar NOT NULL," \
                      "weight float," \
                      "FOREIGN KEY (source) REFERENCES taxonomy(Taxon)," \
                      "FOREIGN KEY (target) REFERENCES taxonomy(Taxon)," \
-                     "FOREIGN KEY (studyID) REFERENCES networks(studyID) ON DELETE CASCADE" \
+                     "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
                      ");"
         # in the metadata table,
         # we actually need 2 tables:
@@ -177,34 +181,30 @@ class ParentConnection:
         # this to tackle issues with different tables
         # having different columns.
         meta_id_query = "CREATE TABLE IF NOT EXISTS sample (" \
-                        "sampleID INTEGER PRIMARY KEY," \
-                        "sample text UNIQUE," \
-                        "studyID int," \
-                        "FOREIGN KEY (studyID) REFERENCES networks(studyID) ON DELETE CASCADE" \
+                        "sampleID varchar PRIMARY KEY," \
+                        "studyID varchar," \
+                        "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
                         ");"
         meta_query = "CREATE TABLE IF NOT EXISTS meta (" \
                      "metaID INTEGER PRIMARY KEY," \
-                     "sampleID int," \
-                     "studyID int," \
+                     "sampleID varchar," \
+                     "studyID varchar," \
                      "property varchar," \
                      "textvalue varchar," \
                      "numvalue float," \
-                     "FOREIGN KEY (studyID) REFERENCES networks(studyID) ON DELETE CASCADE," \
+                     "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE," \
                      "FOREIGN KEY (sampleID) REFERENCES sample(sampleID)" \
                      ");"
         counts_query = "CREATE TABLE IF NOT EXISTS counts (" \
-                       "obsID INTEGER PRIMARY KEY," \
-                       "studyID int," \
+                       "studyID varchar," \
                        "taxon varchar," \
-                       "sampleID int," \
+                       "sampleID varchar," \
                        "count float," \
                        "FOREIGN KEY (SampleID) REFERENCES sample(sampleID)," \
                        "FOREIGN KEY (Taxon) REFERENCES taxonomy(Taxon)," \
-                       "FOREIGN KEY (Taxon) REFERENCES edges(source)," \
-                       "FOREIGN KEY (Taxon) REFERENCES edges(target)," \
-                       "FOREIGN KEY (studyID) REFERENCES networks(studyID) ON DELETE CASCADE" \
+                       "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
                        ");"
-        for query in [network_query, tax_query, edge_query,
+        for query in [biom_query, network_query, tax_query, edge_query,
                       meta_id_query, meta_query, counts_query]:
             try:
                 self.query(query)
@@ -219,5 +219,7 @@ class ParentConnection:
         self.query("DROP TABLE counts;")
         self.query("DROP TABLE edges;")
         self.query("DROP TABLE meta;")
-        self.query("DROP TABLE networks;")
+        self.query("DROP TABLE sample;")
         self.query("DROP TABLE taxonomy;")
+        self.query("DROP TABLE networks CASCADE;")
+        self.query("DROP TABLE bioms CASCADE;")

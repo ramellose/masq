@@ -76,13 +76,13 @@ class IoConnection(ParentConnection):
         """
         node_num = len(network.nodes)
         edge_num = len(network.edges)
-        network_query = "INSERT INTO networks(name,node_num,edge_num) " \
-                        "VALUES (?,?,?)"
+        network_query = "INSERT INTO networks(studyID,node_num,edge_num) " \
+                        "VALUES (%s,%s,%s)"
         network_values = name, node_num, edge_num
         network_id = self.value_query(network_query, network_values)
         edge_values = list()
         edge_query = "INSERT INTO edges (studyID,source,target,weight) " \
-                     "VALUES (?,?,?,?)"
+                     "VALUES (%s,%s,%s,%s)"
         for edge in network.edges:
             if 'weight' in network.edges[edge]:
                 edge_values.append((network_id, edge[0], edge[1], network.edges[edge]['weight']))

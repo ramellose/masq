@@ -88,29 +88,34 @@ class BiomConnection(ParentConnection):
         :param name: BIOM table name
         :return:
         """
+        values = (name, biomfile.shape[0], biomfile.shape[1])
+        self.add_summary(values)
         taxa = biomfile.ids(axis='observation')
         samples = biomfile.ids(axis='sample')
         taxonomy_values = list()
         sample_values = list()
+        meta_values = list()
         obs_values = list()
         for tax in taxa:
             taxonomy = biomfile.metadata(id=tax, axis='observation')['taxonomy']
-            values = [tax]
+            values = [tax, name]
             values.extend(taxonomy)
             # last values may be removed if taxonomy is unavailable
-            while len(values) < 8:
+            while len(values) < 9:
                 values.append(None)
             taxonomy_values.append(tuple(values))
             data = biomfile.data(id=tax, axis='observation')
             for sample in samples:
                 sample_data = biomfile.metadata(id=sample, axis='sample')
                 values = list()
+                sample_values.append((sample, name))
+                values = list()
                 if sample_data:
                     for property in sample_data:
                         value = [sample]
                         value.append(name)
                         value.append(property)
-                        if type(sample_data[property]) == float or type(sample_properties[property]) == int:
+                        if type(sample_data[property]) == float or type(sample_data[property]) == int:
                             value.append(None)
                             value.append(sample_data[property])
                         else:
@@ -119,44 +124,67 @@ class BiomConnection(ParentConnection):
                         values.append(tuple(value))
                 else:
                     values = [(sample, name, None, None, None)]
-                sample_values.extend(values)
+                meta_values.extend(values)
                 count_index = biomfile.index(sample, axis='sample')
                 count = data[count_index]
                 values = name, tax, sample, count
                 obs_values.append(values)
         self.add_taxon(taxonomy_values)
         self.add_sample(sample_values)
+        self.add_meta(meta_values)
         self.add_observation(obs_values)
+
+    def add_summary(self, values):
+        """
+        Adds rows to the bioms table in the PostgreSQL database.
+
+        :param values: List of tuples for bioms table
+        :return:
+        """
+        counts_query = "INSERT INTO bioms (studyID,tax_num,sample_num) " \
+                       "VALUES (%s,%s,%s)"
+        self.value_query(counts_query, values)
 
     def add_taxon(self, values):
         """
-        Adds taxonomy rows to the taxonomy table in the sqlite database.
+        Adds taxonomy rows to the taxonomy table in the PostgreSQL database.
 
         :param values: List of tuples for taxonomy table
         :return:
         """
-        tax_query = "INSERT INTO taxonomy (taxon,Kingdom,Phylum,Class,`Order`,Family,Genus,Species) " \
-                    "VALUES (?,?,?,?,?,?,?,?)"
+        tax_query = 'INSERT INTO taxonomy (taxon,studyID,Kingdom,Phylum,Class,"Order",Family,Genus,Species) ' \
+                    'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)'
         self.value_query(tax_query, values)
 
     def add_sample(self, values):
         """
-        Adds rows to the meta table in the sqlite database.
+        Adds rows to the sample table in the PostgreSQL database.
+
+        :param values: List of tuples for sample table
+        :return:
+        """
+        sample_query = "INSERT INTO sample (sampleID, studyID) " \
+                       "VALUES (%s,%s)"
+        self.value_query(sample_query, values)
+
+    def add_meta(self, values):
+        """
+        Adds rows to the meta table in the PostgreSQL database.
 
         :param values: List of tuples for meta table
         :return:
         """
-        sample_query = "INSERT INTO meta (sample, studyID, property, textvalue, numvalue) " \
-                       "VALUES (?,?,?,?,?)"
+        sample_query = "INSERT INTO meta (sampleID, studyID, property, textvalue, numvalue) " \
+                       "VALUES (%s,%s,%s,%s,%s)"
         self.value_query(sample_query, values)
 
     def add_observation(self, values):
         """
-        Adds rows to the counts table in the sqlite database.
+        Adds rows to the counts table in the PostgreSQL database.
 
         :param values: List of tuples for counts table
         :return:
         """
-        counts_query = "INSERT INTO counts (studyID,taxon,sample,count) " \
-                       "VALUES (?,?,?,?)"
+        counts_query = "INSERT INTO counts (studyID,taxon,sampleID,count) " \
+                       "VALUES (%s,%s,%s,%s)"
         self.value_query(counts_query, values)
