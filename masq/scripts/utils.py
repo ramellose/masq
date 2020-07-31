@@ -168,8 +168,6 @@ class ParentConnection:
                      "source varchar NOT NULL," \
                      "target varchar NOT NULL," \
                      "weight float," \
-                     "FOREIGN KEY (source) REFERENCES taxonomy(Taxon)," \
-                     "FOREIGN KEY (target) REFERENCES taxonomy(Taxon)," \
                      "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
                      ");"
         # in the metadata table,

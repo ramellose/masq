@@ -85,9 +85,9 @@ class IoConnection(ParentConnection):
                      "VALUES (%s,%s,%s,%s)"
         for edge in network.edges:
             if 'weight' in network.edges[edge]:
-                edge_values.append((network_id, edge[0], edge[1], network.edges[edge]['weight']))
+                edge_values.append((name, edge[0], edge[1], network.edges[edge]['weight']))
             else:
-                edge_values.append((network_id, edge[0], edge[1], None))
+                edge_values.append((name, edge[0], edge[1], None))
         self.value_query(edge_query, edge_values)
         logger.info("Uploaded network data for " + name + ".\n")
         return network_id
