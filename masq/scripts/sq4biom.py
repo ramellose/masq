@@ -163,7 +163,7 @@ class BiomConnection(ParentConnection):
         :param values: List of tuples for sample table
         :return:
         """
-        sample_query = "INSERT INTO sample (sampleID, studyID) " \
+        sample_query = "INSERT INTO samples (sampleID, studyID) " \
                        "VALUES (%s,%s)"
         self.value_query(sample_query, values)
 

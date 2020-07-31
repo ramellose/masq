@@ -100,6 +100,7 @@ class ParentConnection:
         except psycopg2.Error as e:
             logger.error(e)
         conn.commit()
+        c.close()
         conn.close()
         return results
 
@@ -132,6 +133,7 @@ class ParentConnection:
             logger.warning("Values are not a tuple or list, so no query was executed.")
         lastrow = c.lastrowid
         conn.commit()
+        c.close()
         conn.close()
         return lastrow
 
@@ -178,7 +180,7 @@ class ParentConnection:
         # the metadata table needs to be 'long' format;
         # this to tackle issues with different tables
         # having different columns.
-        meta_id_query = "CREATE TABLE IF NOT EXISTS sample (" \
+        meta_id_query = "CREATE TABLE IF NOT EXISTS samples (" \
                         "sampleID varchar PRIMARY KEY," \
                         "studyID varchar," \
                         "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
@@ -190,14 +192,14 @@ class ParentConnection:
                      "textvalue varchar," \
                      "numvalue float," \
                      "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE," \
-                     "FOREIGN KEY (sampleID) REFERENCES sample(sampleID)" \
+                     "FOREIGN KEY (sampleID) REFERENCES samples(sampleID)" \
                      ");"
         counts_query = "CREATE TABLE IF NOT EXISTS counts (" \
                        "studyID varchar," \
                        "taxon varchar," \
                        "sampleID varchar," \
                        "count float," \
-                       "FOREIGN KEY (SampleID) REFERENCES sample(sampleID)," \
+                       "FOREIGN KEY (SampleID) REFERENCES samples(sampleID)," \
                        "FOREIGN KEY (Taxon) REFERENCES taxonomy(Taxon)," \
                        "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
                        ");"
@@ -216,7 +218,7 @@ class ParentConnection:
         self.query("DROP TABLE counts;")
         self.query("DROP TABLE edges;")
         self.query("DROP TABLE meta;")
-        self.query("DROP TABLE sample;")
+        self.query("DROP TABLE samples;")
         self.query("DROP TABLE taxonomy;")
         self.query("DROP TABLE networks CASCADE;")
         self.query("DROP TABLE bioms CASCADE;")
