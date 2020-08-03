@@ -30,7 +30,7 @@ logger.addHandler(sh)
 def import_networks(location, mapping=None,
                     config='database.ini',
                     host=None, database=None,
-                    username=None, password=Non):
+                    username=None, password=None):
     """
     Can read a single network or all networks in a folder.
     These are then imported into the sqlite database.
