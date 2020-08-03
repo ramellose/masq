@@ -15,7 +15,8 @@ import biom
 import psycopg2
 import networkx as nx
 from biom.cli.util import write_biom_table
-from masq.scripts.sq4biom import BiomConnection, import_biom
+from masq.scripts.io import import_networks, IoConnection, _read_network_extension
+from masq.scripts.sq4biom import BiomConnection
 
 
 __author__ = 'Lisa Rottjers'
@@ -116,9 +117,9 @@ g["GG_OTU_2"]["GG_OTU_5"]['weight'] = 1.0
 g["GG_OTU_3"]["GG_OTU_4"]['weight'] = -1.0
 
 
-class TestBiom(unittest.TestCase):
+class TestIo(unittest.TestCase):
     """
-    Tests sq4biom methods.
+    Tests utils methods.
     Warning: most of these functions are to interact with a local database named test.
     Therefore, the presence of the necessary local files is a prerequisite.
     """
@@ -170,24 +171,25 @@ class TestBiom(unittest.TestCase):
         cur.close()
         conn.close()
 
-    def test_import_biom(self):
+    def test_import_networks(self):
         """
-        Tests if the import_biom function reads the correct database file,
-        and imports the biom file, by querying the bioms table.
+        Tests if the import_networks function reads the correct database file,
+        and imports the network file, by querying the networks table.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        write_biom_table(testbiom, fmt='hdf5', filepath="test.biom")
-        import_biom("test.biom", mapping=None)
-        os.remove("test.biom")
+        conn_object.add_summary(('test', 2, 5))
+        nx.write_graphml(g, path="test.graphml")
+        import_networks("test.graphml")
+        os.remove("test.graphml")
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
         cur.execute("SELECT studyID "
-                    "FROM bioms "
+                    "FROM networks "
                     "LIMIT 1;")
         result = cur.fetchall()
         cur.close()
@@ -195,50 +197,52 @@ class TestBiom(unittest.TestCase):
         conn_object.delete_tables()
         self.assertEqual(result[0][0], 'test')
 
-    def test_import_biom_obs(self):
+    def test_import_network_edge(self):
         """
-        Tests if the import_biom function reads the correct database file,
-        and imports the biom file, by queriying the counts table.
+        Tests if the import_network function reads the correct database file,
+        and imports the network file, by querying the edges table.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        write_biom_table(testbiom, fmt='hdf5', filepath="test.biom")
-        import_biom("test.biom", mapping=None)
-        os.remove("test.biom")
+        conn_object.add_summary(('test', 2, 5))
+        nx.write_graphml(g, path="test.graphml")
+        import_networks("test.graphml")
+        os.remove("test.graphml")
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT sampleid "
-                    "FROM counts "
-                    "LIMIT 5;")
+        cur.execute("SELECT source, target "
+                    "FROM edges "
+                    "LIMIT 2;")
         result = cur.fetchall()
         cur.close()
         conn.close()
         conn_object.delete_tables()
-        result = [x[0] for x in result]
         self.assertCountEqual(result,
-                              ['Sample1', 'Sample2', 'Sample3', 'Sample4', 'Sample5'])
+                              [("GG_OTU_1", "GG_OTU_2"),
+                                ("GG_OTU_2", "GG_OTU_5")])
 
-    def test_import_biom_mapping(self):
+    def test_import_network_mapping(self):
         """
-        Tests if the BiomConnection uses the mapping dict.
+        Tests if the IoConnection uses the mapping dict.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        write_biom_table(testbiom, fmt='hdf5', filepath="test.biom")
-        import_biom("test.biom", mapping={'test': 'banana'})
-        os.remove("test.biom")
+        conn_object.add_summary(('banana', 2, 5))
+        nx.write_graphml(g, path="test.graphml")
+        import_networks("test.graphml", mapping={"test": "banana"})
+        os.remove("test.graphml")
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
         cur.execute("SELECT studyID "
-                    "FROM bioms "
+                    "FROM networks "
                     "LIMIT 1;")
         result = cur.fetchall()
         cur.close()
@@ -246,9 +250,9 @@ class TestBiom(unittest.TestCase):
         conn_object.delete_tables()
         self.assertEqual(result[0][0], 'banana')
 
-    def test_BiomConnection(self):
+    def test_IoConnection(self):
         """
-        Tests if the BiomConnection can be successfully initialized,
+        Tests if the IoConnection can be successfully initialized,
         with the correct config parameters.
         :return:
         """
@@ -256,238 +260,126 @@ class TestBiom(unittest.TestCase):
                        'database': 'test',
                        'user': 'test',
                        'password': 'test'}
-        conn = BiomConnection()
+        conn = IoConnection()
         read_config = conn.config
         self.assertTrue(test_config == read_config)
 
-    def test_add_biom(self):
+    def test_add_network(self):
         """
-        Tests if the BIOM file is imported by
-        querying the count data.
+        Tests if the network file is added
+        to the database.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
         conn_object.add_biom(testbiom, 'banana')
+        conn_object = IoConnection()
+        conn_object.add_network(g, 'banana')
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT * from counts;")
+        cur.execute("SELECT * from edges;")
         result = cur.fetchall()
-        # long format table of 5 * 6 observations
-        self.assertEqual(len(result), 30)
+        # 3 edges in g
         cur.close()
         conn.close()
         conn_object.delete_tables()
+        self.assertEqual(len(result), 3)
 
-    def test_add_summary(self):
+    def test_add_network_node(self):
         """
-        Tests whether a row is added to the bioms table.
+        Tests whether a row is added to the networks table.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_summary(values=('potato', 5, 20))
+        conn_object.add_biom(testbiom, 'potato')
+        conn_object = IoConnection()
+        conn_object.add_network_node(values=('potato', 5, 20))
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT * from bioms;")
+        cur.execute("SELECT * from networks;")
         result = cur.fetchall()
-        # long format table of 5 * 6 observations
+        cur.close()
+        conn.close()
+        conn_object.delete_tables()
         self.assertEqual(result[0], ('potato', 5, 20))
-        cur.close()
-        conn.close()
-        conn_object.delete_tables()
 
-    def test_add_taxon(self):
+    def test_add_edge(self):
         """
-        Tests whether a row is added to the taxonomy table.
+        Tests whether a row is added to the edge table.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_summary(values=('banana', 1, 2))
-        conn_object.add_taxon(values=('Listeria', 'banana', 'Bacteria',
-                                      'Firmicutes', 'Bacilli',
-                                      'Bacillales', 'Listeriaceae',
-                                      'Listeria', 'monocytogenes'))
+        conn_object.add_biom(testbiom, 'banana')
+        conn_object = IoConnection()
+        conn_object.add_edge(values=("banana", "GG_OTU_1", "GG_OTU_2", 0.3))
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT * from taxonomy;")
+        cur.execute("SELECT * from edges;")
         result = cur.fetchall()
-        # long format table of 5 * 6 observations
-        self.assertEqual(result[0], ('Listeria', 'banana',
-                                     'Bacteria',
-                                     'Firmicutes', 'Bacilli',
-                                     'Bacillales', 'Listeriaceae',
-                                     'Listeria', 'monocytogenes'))
         cur.close()
         conn.close()
         conn_object.delete_tables()
+        self.assertEqual(result[0], ("banana", "GG_OTU_1", "GG_OTU_2", 0.3))
 
-    def test_add_taxon_missingvalues(self):
+    def test_add_edges(self):
         """
-        Tests whether a row is added to the taxonomy table,
-        even when some assignments are unknown.
+        Tests whether new rows are added to the edges table.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_summary(values=('banana', 1, 2))
-        conn_object.add_taxon(values=('Listeria', 'banana', 'Bacteria',
-                                      'Firmicutes', 'Bacilli',
-                                      None, None, None, None))
+        conn_object.add_biom(testbiom, 'banana')
+        conn_object = IoConnection()
+        conn_object.add_edge(values=[("banana", "GG_OTU_1", "GG_OTU_2", 0.3),
+                                     ("banana", "GG_OTU_3", "GG_OTU_5", -0.8)])
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT * from taxonomy;")
+        cur.execute("SELECT * from edges;")
         result = cur.fetchall()
-        # long format table of 5 * 6 observations
-        self.assertEqual(result[0], ('Listeria', 'banana',
-                                     'Bacteria',
-                                     'Firmicutes', 'Bacilli',
-                                     None, None, None, None))
         cur.close()
         conn.close()
         conn_object.delete_tables()
-
-    def test_add_sample(self):
-        """
-        Tests whether a row is added to the sample table.
-        :return:
-        """
-        conn_object = BiomConnection()
-        conn_object.create_tables()
-        conn_object.add_summary(values=('banana', 1, 2))
-        conn_object.add_sample(values=('Sample1', 'banana'))
-        conn = psycopg2.connect(**{"host": "localhost",
-                                   "database": "test",
-                                   "user": "test",
-                                   "password": "test"})
-        cur = conn.cursor()
-        cur.execute("SELECT sampleid from samples;")
-        result = cur.fetchall()
-        # long format table of 5 * 6 observations
-        self.assertEqual(result[0][0], 'Sample1')
-        cur.close()
-        conn.close()
-        conn_object.delete_tables()
-
-    def test_add_meta(self):
-        """
-        Tests whether a row is added to the meta table.
-        :return:
-        """
-        conn_object = BiomConnection()
-        conn_object.create_tables()
-        conn_object.add_summary(values=('banana', 1, 2))
-        conn_object.add_sample(values=('Sample1', 'banana'))
-        conn_object.add_meta(values=('Sample1', 'banana',
-                                     'colour', 'yellow', None))
-        conn = psycopg2.connect(**{"host": "localhost",
-                                   "database": "test",
-                                   "user": "test",
-                                   "password": "test"})
-        cur = conn.cursor()
-        cur.execute("SELECT property from meta;")
-        result = cur.fetchall()
-        # long format table of 5 * 6 observations
-        self.assertEqual(result[0][0], 'colour')
-        cur.close()
-        conn.close()
-        conn_object.delete_tables()
-
-    def test_add_observation(self):
-        """
-        Tests whether a row is added to the counts table.
-        :return:
-        """
-        conn_object = BiomConnection()
-        conn_object.create_tables()
-        conn_object.add_summary(values=('banana', 1, 2))
-        conn_object.add_sample(values=('Sample1', 'banana'))
-        conn_object.add_taxon(values=('Listeria', 'banana', 'Bacteria',
-                                      'Firmicutes', 'Bacilli',
-                                      'Bacillales', 'Listeriaceae',
-                                      'Listeria', 'monocytogenes'))
-        conn_object.add_observation(values=('banana', 'Listeria',
-                                            'Sample1', 0.5))
-        conn = psycopg2.connect(**{"host": "localhost",
-                                   "database": "test",
-                                   "user": "test",
-                                   "password": "test"})
-        cur = conn.cursor()
-        cur.execute("SELECT count from counts;")
-        result = cur.fetchall()
-        # long format table of 5 * 6 observations
-        self.assertEqual(result[0][0], 0.5)
-        cur.close()
-        conn.close()
-        conn_object.delete_tables()
-
-    def test_add_observations(self):
-        """
-        Tests whether multiple rows are added to the counts table.
-        :return:
-        """
-        conn_object = BiomConnection()
-        conn_object.create_tables()
-        conn_object.add_summary(values=('banana', 1, 2))
-        conn_object.add_sample(values=('Sample1', 'banana'))
-        conn_object.add_taxon(values=[('Listeria', 'banana', 'Bacteria',
-                                      'Firmicutes', 'Bacilli',
-                                      'Bacillales', 'Listeriaceae',
-                                      'Listeria', 'monocytogenes'),
-                                      ('Listeria2', 'banana', 'Bacteria',
-                                       'Firmicutes', 'Bacilli',
-                                       'Bacillales', 'Listeriaceae',
-                                       'Listeria', 'monocytogenes')
-                                      ])
-        conn_object.add_observation(values=[('banana', 'Listeria',
-                                            'Sample1', 0.5),
-                                            ('banana', 'Listeria2',
-                                             'Sample1', 0.75)
-                                            ])
-        conn = psycopg2.connect(**{"host": "localhost",
-                                   "database": "test",
-                                   "user": "test",
-                                   "password": "test"})
-        cur = conn.cursor()
-        cur.execute("SELECT count from counts;")
-        result = cur.fetchall()
         self.assertEqual(len(result), 2)
-        cur.close()
-        conn.close()
-        conn_object.delete_tables()
 
-    def test_observation_error(self):
+    def test_edge_error(self):
         """
         Tests if the query correctly reports an error
-        when a taxon is not present in the taxonomy table.
+        when network data is not present
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_summary(values=('banana', 1, 2))
-        conn_object.add_sample(values=('Sample1', 'banana'))
-        conn_object.add_taxon(values=('Listeria', 'banana', 'Bacteria',
-                                      'Firmicutes', 'Bacilli',
-                                      'Bacillales', 'Listeriaceae',
-                                      'Listeria', 'monocytogenes'))
-        self.assertRaises(psycopg2.Error, conn_object.add_observation(
-            values=('banana', 'Streptococcus', 'Sample1', 0.5)),
+        conn_object.add_biom(testbiom, 'banana')
+        conn_object = IoConnection()
+        self.assertRaises(psycopg2.Error, conn_object.add_edge(
+            values=('apple', 'Streptococcus', 'Sample1', 0.5)),
         )
         # long format table of 5 * 6 observations
         conn_object.delete_tables()
+
+    def test_read_network_extension(self):
+        """
+        Tests whether the network can be read from a file.
+        :return:
+        """
+        nx.write_graphml(g, path="test.graphml")
+        graph = _read_network_extension("test.graphml")
+        os.remove("test.graphml")
+        self.assertEqual(len(graph.edges), 3)
 
 
 if __name__ == '__main__':
