@@ -117,7 +117,7 @@ masq_parser.add_argument('-u', '--username',
                               'Can also be specified in config file.',
                          default=None,
                          type=str)
-masq_parser.add_argument('-p', '--password',
+masq_parser.add_argument('-pw', '--password',
                          dest='password',
                          help='Password for PostgreSQL database. '
                               'Can also be specified in config file.',
