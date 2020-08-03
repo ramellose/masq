@@ -16,9 +16,9 @@ __status__ = 'Development'
 __license__ = 'Apache 2.0'
 
 import sys
-import os
 import argparse
 from ast import literal_eval
+from pbr.version import VersionInfo
 from masq.scripts.sq4biom import import_biom
 from masq.scripts.io import import_networks
 from masq.scripts.utils import setup_database
@@ -44,6 +44,10 @@ def masq(masq_args):
     :param masq_args: Arguments.
     :return:
     """
+    if masq_args['version']:
+        info = VersionInfo('anuran')
+        logger.info('Version ' + info.version_string())
+        sys.exit(0)
     # unpack args
     config = masq_args['config']
     database = masq_args['config']
@@ -147,6 +151,12 @@ masq_parser.add_argument('-n', '--networks',
                               'These are imported in the PostgreSQL database. ',
                          default=None,
                          type=list)
+masq_parser.add_argument('-version', '--version',
+                         dest='version',
+                         required=False,
+                         help='Version number.',
+                         action='store_true',
+                         default=False)
 
 
 def main():
