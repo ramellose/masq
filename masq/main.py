@@ -123,7 +123,7 @@ masq_parser.add_argument('-p', '--password',
                               'Can also be specified in config file.',
                          default=None,
                          type=str)
-masq_parser.add_argument('-c', '--create',
+masq_parser.add_argument('-cr', '--create',
                          dest='create',
                          help='If flagged, sets up tables in PostgreSQL database. ',
                          default=False,
