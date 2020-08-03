@@ -58,13 +58,19 @@ def import_biom(location, mapping=None,
     conn = BiomConnection(config, host, database, username, password)
     if os.path.isdir(location):
         for y in os.listdir(location):
-            biomtab = biom.load_table(location + '/' + y)
-            name = y.split(".")[0]
-            if mapping:
-                name = mapping[name]
-            conn.add_biom(biomtab, name)
+            try:
+                biomtab = biom.load_table(location + '/' + y)
+                name = y.split(".")[0]
+                if mapping:
+                    name = mapping[name]
+                conn.add_biom(biomtab, name)
+            except TypeError:
+                logger.warning('Ignoring file with wrong format.', exc_info=True)
     else:
-        biomtab = biom.load_table(location)
+        try:
+            biomtab = biom.load_table(location)
+        except TypeError:
+            logger.warning('Ignoring file with wrong format.', exc_info=True)
         name = location.split('/')[-1]
         name = name.split('\\')[-1]
         name = name.split(".")[0]
