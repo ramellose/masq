@@ -27,7 +27,10 @@ sh.setFormatter(formatter)
 logger.addHandler(sh)
 
 
-def import_networks(db, location, mapping=None):
+def import_networks(location, mapping=None,
+                    config='database.ini',
+                    host=None, database=None,
+                    username=None, password=Non):
     """
     Can read a single network or all networks in a folder.
     These are then imported into the sqlite database.
@@ -36,12 +39,16 @@ def import_networks(db, location, mapping=None):
     The network name should match the BIOM file,
     otherwise metadata (e.g. node taxonomy) cannot be queried.
 
-    :param db: Location of sqlite3 database
     :param location: Location of network file(s)
-    :param mapping: Dictionary with network names as keys, new names as values
+    :param mapping: Dictionary with BIOM filenames as keys, new names as values
+    :param config: Location of file with database parameters.
+    :param host: Database address.
+    :param database: Name of PostgreSQL database.
+    :param username: Username for PostgreSQL database.
+    :param password: Password of PostgreSQL database.
     :return:
     """
-    conn = IoConnection(db)
+    conn = IoConnection(config, host, database, username, password)
     if os.path.isdir(location):
         for y in os.listdir(location):
             network = _read_network_extension(location + '/' + y)
@@ -76,21 +83,38 @@ class IoConnection(ParentConnection):
         """
         node_num = len(network.nodes)
         edge_num = len(network.edges)
-        network_query = "INSERT INTO networks(studyID,node_num,edge_num) " \
-                        "VALUES (%s,%s,%s)"
         network_values = name, node_num, edge_num
-        network_id = self.value_query(network_query, network_values)
+        self.add_network_node(network_values)
         edge_values = list()
-        edge_query = "INSERT INTO edges (studyID,source,target,weight) " \
-                     "VALUES (%s,%s,%s,%s)"
         for edge in network.edges:
             if 'weight' in network.edges[edge]:
                 edge_values.append((name, edge[0], edge[1], network.edges[edge]['weight']))
             else:
                 edge_values.append((name, edge[0], edge[1], None))
-        self.value_query(edge_query, edge_values)
+        self.add_edge(edge_values)
         logger.info("Uploaded network data for " + name + ".\n")
-        return network_id
+
+    def add_network_node(self, values):
+        """
+        Adds rows to the networks table in the PostgreSQL database.
+
+        :param values: List of tuples for bioms table
+        :return:
+        """
+        network_query = "INSERT INTO networks(studyID,node_num,edge_num) " \
+                        "VALUES (%s,%s,%s)"
+        self.value_query(network_query, values)
+
+    def add_edge(self, values):
+        """
+        Adds rows to the edges table in the PostgreSQL database.
+
+        :param values: List of tuples for edges table
+        :return:
+        """
+        edge_query = "INSERT INTO edges (studyID,source,target,weight) " \
+                     "VALUES (%s,%s,%s,%s)"
+        self.value_query(edge_query, values)
 
 
 def _read_network_extension(filename):
