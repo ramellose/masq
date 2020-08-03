@@ -27,6 +27,32 @@ sh.setFormatter(formatter)
 logger.addHandler(sh)
 
 
+def setup_database(config='database.ini', create=True,
+                   host=None, database=None,
+                   username=None, password=None):
+    """
+    Connects to PostgreSQL database,
+    either via provided args (priority)
+    or the database.ini config file.
+    Depending on the arguments,
+    tables for adding BIOM files and networks
+    are either added or deleted.
+
+    :param config: Location of file with database parameters.
+    :param create: If true, tables are created. Otherwise, deleted.
+    :param host: Database address.
+    :param database: Name of PostgreSQL database.
+    :param username: Username for PostgreSQL database.
+    :param password: Password of PostgreSQL database.
+    :return:
+    """
+    conn = ParentConnection(config, host, database, username, password)
+    if create:
+        conn.create_tables()
+    else:
+        conn.delete_tables()
+
+
 class ParentConnection:
     def __init__(self, config='database.ini',
                  host=None, database=None,
