@@ -105,7 +105,7 @@ masq_parser.add_argument('-d', '--database',
                               'Can also be specified in config file.',
                          default=None,
                          type=str)
-masq_parser.add_argument('-h', '--host',
+masq_parser.add_argument('-ht', '--host',
                          dest='host',
                          help='Host location for PostgreSQL database. '
                               'Can also be specified in config file.',
