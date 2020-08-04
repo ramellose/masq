@@ -1,6 +1,6 @@
 """
 This file contains a  class for writing a network file
-to a sqlite3 database.
+to a PostgreSQL database.
  Both a summary network table are edited,
  as well as an edge list table. """
 
@@ -125,6 +125,21 @@ class IoConnection(ParentConnection):
         edge_query = "INSERT INTO edges (networkID,source,target,weight) " \
                      "VALUES (%s,%s,%s,%s)"
         self.value_query(edge_query, values)
+
+    def export_network(self, name):
+        """
+        Extracts all edges belonging to a specific network,
+        and returns these as a networkx object.
+        :param name: Network name
+        :return:
+        """
+        network_query = "SELECT * from edges WHERE " \
+                        "networkID='" + name + "';"
+        edges = self.query(network_query, fetch=True)
+        network = nx.Graph()
+        for edge in edges:
+            network.add_edge(edge[1], edge[2], weight=edge[3])
+        return network
 
 
 def _read_network_extension(filename):
