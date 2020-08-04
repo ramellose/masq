@@ -122,7 +122,7 @@ class IoConnection(ParentConnection):
         :param values: List of tuples for edges table
         :return:
         """
-        edge_query = "INSERT INTO edges (studyID,source,target,weight) " \
+        edge_query = "INSERT INTO edges (networkID,source,target,weight) " \
                      "VALUES (%s,%s,%s,%s)"
         self.value_query(edge_query, values)
 
