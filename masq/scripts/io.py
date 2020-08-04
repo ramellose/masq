@@ -57,9 +57,10 @@ def import_networks(location, mapping=None, sources=None,
             source = name
             if mapping:
                 name = mapping[name]
+                source = name
             if source:
                 source = sources[name]
-            conn.add_network(network, name, source)
+            conn.add_network(network, name=name, study=source)
     else:
         network = _read_network_extension(location)
         name = location.split('/')[-1]
@@ -68,9 +69,10 @@ def import_networks(location, mapping=None, sources=None,
         source = name
         if mapping:
             name = mapping[name]
+            source = name
         if sources:
             source = sources[name]
-        conn.add_network(network, name, source)
+        conn.add_network(network, name=name, study=source)
 
 
 class IoConnection(ParentConnection):

@@ -193,11 +193,11 @@ class ParentConnection:
                     "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
                     ");"
         edge_query = "CREATE TABLE IF NOT EXISTS edges (" \
-                     "studyID varchar," \
+                     "networkID varchar," \
                      "source varchar NOT NULL," \
                      "target varchar NOT NULL," \
                      "weight float," \
-                     "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \
+                     "FOREIGN KEY (networkID) REFERENCES networks(networkID) ON DELETE CASCADE" \
                      ");"
         # in the metadata table,
         # we actually need 2 tables:
