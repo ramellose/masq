@@ -398,6 +398,20 @@ class TestIo(unittest.TestCase):
         # long format table of 5 * 6 observations
         conn_object.delete_tables()
 
+    def test_export_network(self):
+        """
+        Tests whether the network can be exported from the database.
+        :return:
+        """
+        conn_object = BiomConnection()
+        conn_object.create_tables()
+        conn_object.add_biom(testbiom, 'banana')
+        conn_object = IoConnection()
+        conn_object.add_network(g, 'banana', 'banana')
+        network = conn_object.export_network(name='banana')
+        conn_object.delete_tables()
+        self.assertEqual(len(network.edges), 3)
+
     def test_read_network_extension(self):
         """
         Tests whether the network can be read from a file.

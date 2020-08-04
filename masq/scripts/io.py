@@ -77,7 +77,7 @@ def import_networks(location, mapping=None, sources=None,
 
 class IoConnection(ParentConnection):
     """
-    Initializes a connection to the sqlite3 database.
+    Initializes a connection to the PostgreSQL database.
     This connection object contains methods for converting NetworkX
     objects to rows in the summary network table
     and rows in the edges table.
@@ -97,10 +97,14 @@ class IoConnection(ParentConnection):
         self.add_network_node(network_values)
         edge_values = list()
         for edge in network.edges:
+            # need to make sure source and target are sorted,
+            # so they are always identical.
+            # This facilitates group_by SQL queries
+            partners = sorted([edge[0], edge[1]])
             if 'weight' in network.edges[edge]:
-                edge_values.append((name, edge[0], edge[1], network.edges[edge]['weight']))
+                edge_values.append((name, partners[0], partners[1], network.edges[edge]['weight']))
             else:
-                edge_values.append((name, edge[0], edge[1], None))
+                edge_values.append((name, partners[0], partners[1], None))
         self.add_edge(edge_values)
         logger.info("Uploaded network data for " + name + ".\n")
 
