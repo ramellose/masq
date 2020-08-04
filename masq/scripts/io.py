@@ -27,7 +27,7 @@ sh.setFormatter(formatter)
 logger.addHandler(sh)
 
 
-def import_networks(location, mapping=None,
+def import_networks(location, mapping=None, sources=None,
                     config='database.ini',
                     host=None, database=None,
                     username=None, password=None):
@@ -41,6 +41,7 @@ def import_networks(location, mapping=None,
 
     :param location: Location of network file(s)
     :param mapping: Dictionary with BIOM filenames as keys, new names as values
+    :param sources: Dictionary with network filenames as keys, BIOM names as values
     :param config: Location of file with database parameters.
     :param host: Database address.
     :param database: Name of PostgreSQL database.
@@ -53,17 +54,23 @@ def import_networks(location, mapping=None,
         for y in os.listdir(location):
             network = _read_network_extension(location + '/' + y)
             name = y.split(".")[0]
+            source = name
             if mapping:
                 name = mapping[name]
-            conn.add_network(network, name)
+            if source:
+                source = sources[name]
+            conn.add_network(network, name, source)
     else:
         network = _read_network_extension(location)
         name = location.split('/')[-1]
         name = name.split('\\')[-1]
         name = name.split(".")[0]
+        source = name
         if mapping:
             name = mapping[name]
-        conn.add_network(network, name)
+        if sources:
+            source = sources[name]
+        conn.add_network(network, name, source)
 
 
 class IoConnection(ParentConnection):
@@ -74,16 +81,17 @@ class IoConnection(ParentConnection):
     and rows in the edges table.
     """
     # inherits init from parent
-    def add_network(self, network, name):
+    def add_network(self, network, name, study):
         """
         Takes a networkx object and writes this to the sqlite3 database.
         :param network: NetworkX object
         :param name: Network name
+        :param study: Study ID (needs to match a biom ID)
         :return:
         """
         node_num = len(network.nodes)
         edge_num = len(network.edges)
-        network_values = name, node_num, edge_num
+        network_values = name, study, node_num, edge_num
         self.add_network_node(network_values)
         edge_values = list()
         for edge in network.edges:
@@ -101,8 +109,8 @@ class IoConnection(ParentConnection):
         :param values: List of tuples for bioms table
         :return:
         """
-        network_query = "INSERT INTO networks(studyID,node_num,edge_num) " \
-                        "VALUES (%s,%s,%s)"
+        network_query = "INSERT INTO networks(networkID, studyID,node_num,edge_num) " \
+                        "VALUES (%s, %s,%s,%s)"
         self.value_query(network_query, values)
 
     def add_edge(self, values):

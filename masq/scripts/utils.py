@@ -174,7 +174,8 @@ class ParentConnection:
                      "sample_num int" \
                      ");"
         network_query = "CREATE TABLE IF NOT EXISTS networks (" \
-                        "studyID varchar PRIMARY KEY," \
+                        "networkID varchar PRIMARY KEY," \
+                        "studyID varchar," \
                         "node_num int," \
                         "edge_num int," \
                         "FOREIGN KEY (studyID) REFERENCES bioms(studyID) ON DELETE CASCADE" \

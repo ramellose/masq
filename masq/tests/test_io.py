@@ -250,6 +250,31 @@ class TestIo(unittest.TestCase):
         conn_object.delete_tables()
         self.assertEqual(result[0][0], 'banana')
 
+    def test_import_network_source(self):
+        """
+        Tests if the IoConnection uses the source dict.
+        :return:
+        """
+        conn_object = BiomConnection()
+        conn_object.create_tables()
+        conn_object.add_summary(('banana', 2, 5))
+        nx.write_graphml(g, path="test.graphml")
+        import_networks("test.graphml", sources={"test": "banana"})
+        os.remove("test.graphml")
+        conn = psycopg2.connect(**{"host": "localhost",
+                                   "database": "test",
+                                   "user": "test",
+                                   "password": "test"})
+        cur = conn.cursor()
+        cur.execute("SELECT studyID "
+                    "FROM networks "
+                    "LIMIT 1;")
+        result = cur.fetchall()
+        cur.close()
+        conn.close()
+        conn_object.delete_tables()
+        self.assertEqual(result[0][0], 'test')
+
     def test_IoConnection(self):
         """
         Tests if the IoConnection can be successfully initialized,
@@ -274,7 +299,7 @@ class TestIo(unittest.TestCase):
         conn_object.create_tables()
         conn_object.add_biom(testbiom, 'banana')
         conn_object = IoConnection()
-        conn_object.add_network(g, 'banana')
+        conn_object.add_network(g, 'banana', 'banana')
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
@@ -297,7 +322,7 @@ class TestIo(unittest.TestCase):
         conn_object.create_tables()
         conn_object.add_biom(testbiom, 'potato')
         conn_object = IoConnection()
-        conn_object.add_network_node(values=('potato', 5, 20))
+        conn_object.add_network_node(values=('potato', 'potato', 5, 20))
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
@@ -308,7 +333,7 @@ class TestIo(unittest.TestCase):
         cur.close()
         conn.close()
         conn_object.delete_tables()
-        self.assertEqual(result[0], ('potato', 5, 20))
+        self.assertEqual(result[0], ('potato', 'potato', 5, 20))
 
     def test_add_edge(self):
         """

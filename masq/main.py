@@ -57,6 +57,7 @@ def masq(masq_args):
     password = masq_args['password']
     host = masq_args['host']
     mapping = masq_args['mapping']
+    sources = masq_args['sources']
     if masq_args['mapping']:
         try:
             with open(masq_args['mapping'], 'r') as file:
@@ -64,6 +65,14 @@ def masq(masq_args):
                 mapping = literal_eval(contents)
         except (ValueError, TypeError):
             logger.warning("Mapping file could not be imported,\n"
+                           "and will be ignored. ")
+    if masq_args['sources']:
+        try:
+            with open(masq_args['sources'], 'r') as file:
+                contents = file.read()
+                mapping = literal_eval(contents)
+        except (ValueError, TypeError):
+            logger.warning("Source file could not be imported,\n"
                            "and will be ignored. ")
     if masq_args['create']:
         logger.info('Setting up tables in PostgreSQL database. ')
@@ -86,6 +95,7 @@ def masq(masq_args):
         logger.info('Importing network files...')
         for network in networks:
             import_networks(location=network, mapping=mapping,
+                            sources=sources,
                             config=config,
                             host=host, database=database,
                             username=username, password=password)
@@ -145,6 +155,22 @@ masq_parser.add_argument('-n', '--networks',
                               'These are imported in the PostgreSQL database. ',
                          default=None,
                          type=list)
+masq_parser.add_argument('-map', '--mapping',
+                         dest='map',
+                         help='By default, BIOM and network names are derived from file names.\n'
+                              'Use this option to provide a text file containing a dictionary,\n'
+                              'that matches filenames to alternative names.\n'
+                              'Example: {"banana": "apple"} renames the files banana.biom or banana.graphml to apple.',
+                         default=None,
+                         type=str)
+masq_parser.add_argument('-ns', '--network_sources',
+                         dest='sources',
+                         help='By default, network names are presumed to be identical to BIOM names.\n'
+                              'Use this option to provide a text file containing a dictionary,\n'
+                              'that matches networks to alternative BIOM files.\n'
+                              'Example: {"banana": "apple"} matches the graph banana.graphml to apple.biom.',
+                         default=None,
+                         type=str)
 masq_parser.add_argument('-version', '--version',
                          dest='version',
                          required=False,
