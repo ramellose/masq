@@ -266,7 +266,7 @@ class TestIo(unittest.TestCase):
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT studyID "
+        cur.execute("SELECT networkID "
                     "FROM networks "
                     "LIMIT 1;")
         result = cur.fetchall()
@@ -344,6 +344,7 @@ class TestIo(unittest.TestCase):
         conn_object.create_tables()
         conn_object.add_biom(testbiom, 'banana')
         conn_object = IoConnection()
+        conn_object.add_network_node(values=("banana", "banana", 2, 3))
         conn_object.add_edge(values=("banana", "GG_OTU_1", "GG_OTU_2", 0.3))
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
@@ -366,6 +367,7 @@ class TestIo(unittest.TestCase):
         conn_object.create_tables()
         conn_object.add_biom(testbiom, 'banana')
         conn_object = IoConnection()
+        conn_object.add_network_node(values=("banana", "banana", 2, 3))
         conn_object.add_edge(values=[("banana", "GG_OTU_1", "GG_OTU_2", 0.3),
                                      ("banana", "GG_OTU_3", "GG_OTU_5", -0.8)])
         conn = psycopg2.connect(**{"host": "localhost",
