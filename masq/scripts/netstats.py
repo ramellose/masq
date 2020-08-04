@@ -26,11 +26,11 @@ sh.setFormatter(formatter)
 logger.addHandler(sh)
 
 
-def extract_networks(set, networks=None,
-                     size=None, weight=True,
-                     config='database.ini',
-                     host=None, database=None,
-                     username=None, password=None):
+def extract_sets(path, set, networks=None,
+                 size=None, weight=True,
+                 config='database.ini',
+                 host=None, database=None,
+                 username=None, password=None):
     """
     Can read a single network or all networks in a folder.
     These are then imported into the sqlite database.
@@ -49,6 +49,16 @@ def extract_networks(set, networks=None,
     :return:
     """
     conn = SetConnection(config, host, database, username, password)
+    if not networks:
+        networks = conn.get_networks()
+    if set == 'intersection':
+        g = conn.get_intersection(networks, number=int((len(networks)*size)),
+                                  weight=weight)
+    elif set == 'difference':
+        g = conn.get_difference(networks, weight=weight)
+    elif set == 'union':
+        g = conn.get_union(networks)
+    nx.write_graphml(g, path + "//" + set + ".graphml")
 
 
 class SetConnection(ParentConnection):
@@ -85,6 +95,7 @@ class SetConnection(ParentConnection):
         set_result = self.query(set_query, fetch=True)
         g = _convert_network(set_result)
         logger.info("Extracted intersection across " + str(number) + " networks...\n")
+        return g
 
     def get_difference(self, networks, weight=True):
         """
@@ -109,6 +120,7 @@ class SetConnection(ParentConnection):
         set_result = self.query(set_query, fetch=True)
         g = _convert_network(set_result)
         logger.info("Extracted difference...\n")
+        return g
 
     def get_union(self, networks):
         """
@@ -125,6 +137,7 @@ class SetConnection(ParentConnection):
         set_result = self.query(set_query, fetch=True)
         g = _convert_network(set_result)
         logger.info("Extracted union...\n")
+        return g
 
     def get_networks(self):
         """
