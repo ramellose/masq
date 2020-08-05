@@ -130,7 +130,7 @@ class ParentConnection:
         conn.close()
         return results
 
-    def value_query(self, query, values):
+    def value_query(self, query, values, fetch=False):
         """
         If given a standard query with question marks,
         the values are used to replace the question marks in the query.
@@ -140,9 +140,11 @@ class ParentConnection:
 
         :param query: String containing sqlite query with question marks
         :param values: Iterable of values
+        :param fetch: If set to true, fetches output
         :return: Last row ID
         """
         conn = psycopg2.connect(**self.config)
+        results = None
         if type(values) == tuple:
             try:
                 c = conn.cursor()
@@ -157,11 +159,12 @@ class ParentConnection:
                 logger.error(e)
         else:
             logger.warning("Values are not a tuple or list, so no query was executed.")
-        lastrow = c.lastrowid
+        if fetch:
+            results = c.fetchall()
         conn.commit()
         c.close()
         conn.close()
-        return lastrow
+        return results
 
     def create_tables(self):
         """

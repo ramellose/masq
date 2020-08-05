@@ -1,6 +1,6 @@
 """
 This file contains functions for testing functions
-and the ParentConnection class in the utils.py file.
+and the BiomConnection class in the sq4biom.py file.
 
 The file first connects to a simple PostgreSQL database for carrying out the tests.
 This database is cleaned up after testing so it can be reused.

@@ -1,6 +1,6 @@
 """
 This file contains functions for testing functions
-and the ParentConnection class in the utils.py file.
+and the StatConnection class in the netstats.py file.
 
 The file first connects to a simple PostgreSQL database for carrying out the tests.
 This database is cleaned up after testing so it can be reused.
@@ -246,7 +246,7 @@ class TestNetstats(unittest.TestCase):
         conn_object = SetConnection()
         intersection_set = conn_object.get_intersection(networks=["g1", "g2"], number=2, weight=False)
         conn_object.delete_tables()
-        self.assertEqual(len(intersection_set.edges), 5)
+        self.assertEqual(len(intersection_set.edges), 3)
 
     def test_get_difference(self):
         """
@@ -361,7 +361,7 @@ class TestNetstats(unittest.TestCase):
                     "WHERE networkID IN " + str(('g1', 'g2')) + \
                     " GROUP BY source, target, SIGN(weight) " \
                     "HAVING COUNT(*) > " + str(1)
-        set_result = self.query(set_query, fetch=True)
+        set_result = conn_object.query(set_query, fetch=True)
         graph = _convert_network(set_result)
         conn_object.delete_tables()
         self.assertEqual(len(graph.edges), 1)

@@ -1,8 +1,12 @@
 """
 This file contains a  class for writing a network file
 to a PostgreSQL database.
- Both a summary network table are edited,
- as well as an edge list table. """
+Both a summary network table are edited,
+as well as an edge list table.
+Since the edges are undirected, the source / target structure
+normally used in edge lists interferes with table joining operations.
+Therefore, each edge instead gets an ID and a partner, and is imported as 2 rows in the table.
+"""
 
 __author__ = 'Lisa Rottjers'
 __maintainer__ = 'Lisa Rottjers'
