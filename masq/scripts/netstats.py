@@ -52,6 +52,11 @@ def extract_sets(path, set, networks=None,
     if not networks:
         networks = conn.get_networks()
     if set == 'intersection':
+        if not size:
+            size = 1
+        elif size*len(networks) > len(networks):
+            logger.error("Cannot extract intersection for more networks "
+                         "than the number of networks in the database. ")
         g = conn.get_intersection(networks, number=int((len(networks)*size)),
                                   weight=weight)
     elif set == 'difference':
@@ -84,14 +89,14 @@ class SetConnection(ParentConnection):
                         "FROM edges " \
                         "WHERE networkID IN " + str(tuple(networks)) + \
                         " GROUP BY source, target, SIGN(weight) " \
-                        "HAVING COUNT(*) > " + str(number)
+                        "HAVING COUNT(*) > " + str(number-1)
         else:
             set_query = "SELECT string_agg(networkID::varchar, ',') AS networks, " \
-                        "source, target, COUNT(*) " \
+                        "source, target, string_agg(weight::varchar, ',') as weights, COUNT(*) " \
                         "FROM edges " \
                         "WHERE networkID IN " + str(tuple(networks)) + \
-                        " GROUP BY source, target" \
-                        "HAVING COUNT(*) > " + str(number)
+                        " GROUP BY source, target " \
+                        "HAVING COUNT(*) > " + str(number-1)
         set_result = self.query(set_query, fetch=True)
         g = _convert_network(set_result)
         logger.info("Extracted intersection across " + str(number) + " networks...\n")
@@ -112,7 +117,7 @@ class SetConnection(ParentConnection):
                         "HAVING COUNT(*) = 1 "
         else:
             set_query = "SELECT string_agg(networkID::varchar, ',') AS networks, " \
-                        "source, target, COUNT(*) " \
+                        "source, target, string_agg(weight::varchar, ',') as weights, COUNT(*) " \
                         "FROM edges " \
                         "WHERE networkID IN " + str(tuple(networks)) + \
                         " GROUP BY source, target " \
@@ -154,17 +159,18 @@ class SetConnection(ParentConnection):
 def _convert_network(edge_list):
     """
     Takes a SQL output with edges (and weights).
-    If the edge list has a length of 5,
+    With the edge list having a length of 5,
     the 4th value is assumed to be the edge sign / weight.
-    If it has length 4, the weight is assumed to be ignored.
+    If the query was carried out without grouping by weight,
+    weight is a string variable generated from aggregated weights.
+
+    WARNING: networkx does not support edges with multiple weights.
+    So the edge may be overwritten.
     :param edge_list:
     :return: Networkx graph
     """
     g = nx.Graph()
-    if len(edge_list[0]) == 4:
-        for edge in edge_list:
-           g.add_edge(edge[1], edge[2], source=edge[0])
-    else:
+    if len(edge_list) > 0:
         for edge in edge_list:
             g.add_edge(edge[1], edge[2], source=edge[0], weight=edge[3])
     return g
