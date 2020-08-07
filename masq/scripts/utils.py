@@ -252,3 +252,14 @@ class ParentConnection:
         self.query("DROP TABLE taxonomy;")
         self.query("DROP TABLE networks CASCADE;")
         self.query("DROP TABLE bioms CASCADE;")
+
+    def get_networks(self):
+        """
+        Gets the network names from the database,
+        in case these are not given by the user.
+        :return: List with network names
+        """
+        network_query = "SELECT networkID from networks;"
+        networks = self.query(network_query, fetch=True)
+        networks = [x[0] for x in networks]
+        return networks
