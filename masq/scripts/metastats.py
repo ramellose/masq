@@ -12,6 +12,7 @@ __license__ = 'Apache 2.0'
 import sys
 import os
 import networkx as nx
+from uuid import uuid4
 import logging.handlers
 from masq.scripts.utils import ParentConnection
 
@@ -135,8 +136,7 @@ class MetaConnection(ParentConnection):
                         # limit is necessary to prevent excessively long queries
                         pairs = self.get_pairlist(level=level, weight=weight, network=network)
                         if pairs:
-                            pair = pairs[0]['p']
-                            self.agglomerate_pair(pair, level=level, weight=weight, network=network)
+                            self.agglomerate_pair(pairs, level=level, network=network)
                         else:
                             stop_condition = True
                     stop_condition = False
@@ -150,10 +150,10 @@ class MetaConnection(ParentConnection):
                             self.agglomerate_taxa(tax_nodes, level=level, weight=weight)
                         else:
                             stop_condition = True
-                    num = self.query("MATCH (n:Network {name: '" + network + "'})-"
-                                     "[r:PART_OF]-() RETURN count(r) as count")
+                    num = self.value_query("SELECT count(*) FROM edges WHERE edges.networkID=%s",
+                                           values=(network,), fetch=True)
                     logger.info("The agglomerated network " + network +
-                                " contains " + str(num) + " edges.")
+                                " contains " + str(num[0][0]) + " edges.")
         except Exception:
             logger.error("Could not agglomerate edges to higher taxonomic levels. \n", exc_info=True)
         return new_networks
@@ -191,18 +191,32 @@ class MetaConnection(ParentConnection):
         copy_query = "INSERT INTO copy (source, target, weight) " \
                      "SELECT target, source, weight FROM copy;"
         self.value_query(copy_query, (network,))
-        agglom_query = "SELECT string_agg(source::varchar, ',') as source," \
-                       "string_agg(target::varchar, ',') as target, p." + level + \
-                       " as source, q." + level + " as target FROM copy as e " \
-                       "JOIN taxonomy as p ON e.source = p.taxon " \
-                       "JOIN taxonomy as q on e.target = q.taxon " \
-                       "GROUP BY p." + level + ", q." + level + \
-                       " HAVING COUNT(*) > 1 LIMIT 1;"
+        if weight:
+            agglom_query = "SELECT string_agg(source::varchar, ','), " \
+                           "string_agg(target::varchar, ','), p." + level + \
+                           " as source, q." + level + \
+                           " as target, sign(WEIGHT) FROM copy as e " \
+                           "JOIN taxonomy as p ON e.source = p.taxon " \
+                           "JOIN taxonomy as q on e.target = q.taxon " \
+                           "GROUP BY p." + level + ", q." + level + \
+                           ", SIGN(e.weight) HAVING COUNT(*) > 1 LIMIT 1;"
+        else:
+            agglom_query = "SELECT string_agg(source::varchar, ','), " \
+                           "string_agg(target::varchar, ','), p." + level + \
+                           " as source, q." + level + " as target FROM copy as e " \
+                           "JOIN taxonomy as p ON e.source = p.taxon " \
+                           "JOIN taxonomy as q on e.target = q.taxon " \
+                           "GROUP BY p." + level + ", q." + level + \
+                           " HAVING COUNT(*) > 1 LIMIT 1;"
         results = self.value_query(agglom_query, values=(network,), fetch=True)
         self.query("DROP TABLE copy;")
         sources = results[0][0].split(',')
         targets = results[0][1].split(',')
-        # need to check if sources and targets need to be swapped
+        if weight:
+            weight = results[0][4]
+        else:
+            weight = None
+            # need to check if sources and targets need to be swapped
         check_query = "SELECT source, target from edges WHERE networkID = %s " \
                       "AND source=%s AND target=%s"
         for i in range(len(sources)):
@@ -210,4 +224,137 @@ class MetaConnection(ParentConnection):
             if len(checks) == 0:
                 sources[i] = results[0][1].split(',')[i]
                 targets[i] = results[0][0].split(',')[i]
-        return sources, targets
+        return sources, targets, weight
+
+    def get_taxlist(self, level, network):
+        """
+        Returns two taxa that have the same taxonomic label at the specified level,
+        as well as an edge belonging to the same network.
+
+        :param level: Taxonomic level to identify a pair.
+        :param weight: if True, specifies that edge weights should have the same sign.
+        :param network: Name of network that the pairs should belong to
+        :return: List containing results of Neo4j transaction
+        """
+        # first, modify the table so that
+        # edge taxonomy at the level of interest is in alphabetical order
+        copy_query = "CREATE TABLE copy AS " \
+                     "SELECT source, target FROM edges " \
+                     "WHERE edges.networkID = %s;"
+        self.value_query(copy_query, (network,))
+        copy_query = "INSERT INTO copy (source, target) " \
+                     "SELECT target, source FROM copy;"
+        self.value_query(copy_query, (network,))
+        agglom_query = "SELECT string_agg(source::varchar, ',') " \
+                       "FROM (SELECT DISTINCT source FROM copy) as e " \
+                       "JOIN taxonomy as p ON e.source = p.taxon " \
+                       "GROUP BY p." + level + \
+                       " HAVING COUNT(*) > 1 LIMIT 1;"
+        results = self.value_query(agglom_query, values=(network,), fetch=True)
+        self.query("DROP TABLE copy;")
+        sources = results[0][0].split(',')
+        return sources
+
+    def copy_network(self, source_network, new_network):
+        """
+        Copies a network node and its edges.
+        The network node name is new_network.
+        The weights of the edges are not copied, only the signs.
+
+        :param source_network: Source network name
+        :param new_network: New network name
+        :return:
+        """
+        vals = self.value_query("SELECT studyid, node_num, edge_num "
+                                "FROM networks WHERE networkID=%s;",
+                                values=(source_network,), fetch=True)
+        self.value_query("INSERT INTO networks (networkID, studyID, node_num, edge_num) "
+                         "VALUES (%s, %s, %s, %s)", values=(new_network,) + vals[0])
+        edges = self.value_query("SELECT source, target, weight FROM edges "
+                                 "WHERE networkID=%s;", values=(source_network,), fetch=True)
+        self.value_query("INSERT INTO edges (networkID, source, target, weight) "
+                         "VALUES (%s, %s, %s, %s)",
+                         values=[(new_network,) + edge for edge in edges])
+
+    def agglomerate_pair(self, pair, level, network):
+        """
+        When given a tuple containg two tuples and a weight value,
+        this function creates merged nodes from the two tuples,
+        and adds an edge between them in the specified network.
+
+        The old edges between the two tuples are deleted in the specified network.
+
+        :param pair: Tuple containing two tuples with nodes and a weight value
+        :param level: Taxonomic info to add to new merged node
+        :param network: Name of network containing new edge
+        :return:
+        """
+        # merge nodes
+        new_1 = self.create_agglom(parent=pair[0][0], level=level)
+        new_2 = self.create_agglom(parent=pair[1][0], level=level)
+        # delete edges between pair
+        del_query = "DELETE FROM edges WHERE networkID=%s " \
+                    "AND source=%s AND target=%s"
+        self.value_query(del_query,
+                         values=(network, pair[0][0], pair[1][0]))
+        self.value_query(del_query,
+                         values=(network, pair[0][1], pair[1][1]))
+        # add new edge between new nodes
+        self.value_query("INSERT INTO edges (networkID, source, target, weight) "
+                         "VALUES (%s,%s,%s,%s)", values=(network, new_1, new_2, pair[2]))
+
+    def agglomerate_taxa(self, nodes, level, network):
+        """
+        Creates a merged taxon at the specified taxonomic level.
+        If weight is set to true, edges with different weights but the same partners
+        are kept.
+        Otherwise, edges are merged into a single edge without weights.
+
+        :param nodes: Nodes belonging to the same taxonomic group
+        :param level: Taxonomic level to merge to
+        :param weight: Affects how edges with different weights but shared partners are merged
+        :return:
+        """
+        new = self.create_agglom(parent=nodes[0], level=level)
+        for node in nodes:
+            # first get edges where node is source
+            partners = self.value_query("SELECT target, weight FROM edges as e "
+                                        "WHERE e.source=%s "
+                                        "AND e.networkID=%s", values=(node, network), fetch=True)
+            partners.extend(self.value_query("SELECT source, weight FROM edges as e "
+                                             "WHERE e.target=%s "
+                                             "AND e.networkID=%s", values=(node, network), fetch=True))
+            # delete old edges
+            for partner in partners:
+                del_query = "DELETE FROM edges WHERE networkID=%s " \
+                            "AND source=%s AND target=%s"
+                self.value_query(del_query, values=(network, node, partner[0]))
+                self.value_query(del_query, values=(network, partner[0], node))
+                # add new edges if edge does not exist yet
+                check = self.value_query("SELECT weight FROM edges as e "
+                                         "WHERE e.networkid=%s AND e.source=%s "
+                                         "AND e.target=%s AND e.weight=%s",
+                                         values=(network, new, partner[0], partner[1]), fetch=True)
+                if len(check) == 0:
+                    self.value_query("INSERT INTO edges (networkID, source, target, weight) "
+                                     "VALUES (%s,%s,%s,%s)",
+                                     values=(network, new, partner[0], partner[1]))
+
+
+
+    def create_agglom(self, parent, level):
+        uid = str(uuid4())
+        tax_levels = ['Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species']
+        tax_id = tax_levels.index(level)
+        tax = list(self.value_query("SELECT * FROM taxonomy WHERE taxon=%s",
+                               values=(parent,), fetch=True)[0])
+        tax = tuple(tax[1:(3+tax_id)])
+        tax = (uid, ) + tax
+        while len(tax) < 9:
+            tax += (None, )
+        tax_query = 'INSERT INTO taxonomy (taxon,studyID,Kingdom,Phylum,Class,"Order",Family,Genus,Species) ' \
+                    'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)'
+        self.value_query(tax_query, tax)
+        return uid
+
+
