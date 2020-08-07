@@ -14,9 +14,10 @@ import os
 import biom
 import psycopg2
 import networkx as nx
-from biom.cli.util import write_biom_table
-from masq.scripts.io import import_networks, IoConnection, _read_network_extension
+from masq.scripts.io import IoConnection
 from masq.scripts.sq4biom import BiomConnection
+from masq.scripts.metastats import start_metastats, MetaConnection
+from pandas.core.common import flatten
 
 
 __author__ = 'Lisa Rottjers'
@@ -46,7 +47,9 @@ g_Anthrax", "s__"]}},
 s", "c__Clostridia", "o__Halanaerobiales", "f__Punk", "g__NOFX", "s__"]}},
         {"id":"GG_OTU_5", "metadata":{"taxonomy":["k__Bacteria", "p__Proteobac\
 teria", "c__Gammaproteobacteria", "o__Enterobacteriales", "f__Enterobacteriace\
-ae", "g__Escherichia", "s__"]}}
+ae", "g__Escherichia", "s__"]}}, 
+        {"id":"GG_OTU_6", "metadata":{"taxonomy":["k__Bacteria", "p__Firmicute\
+s", "c__Clostridia", "o__Halanaerobiales", "f__Punk", "g__Misfits", "s__"]}}\
         ],
      "columns":[
         {"id":"Sample1", "metadata":{
@@ -231,13 +234,15 @@ g = nx.Graph()
 nodes = ["GG_OTU_1", "GG_OTU_2", "GG_OTU_3", "GG_OTU_4", "GG_OTU_5"]
 g.add_nodes_from(nodes)
 g.add_edges_from([("GG_OTU_1", "GG_OTU_3"),
-                  ("GG_OTU_2", "GG_OTU_5"), ("GG_OTU_4", "GG_OTU_5")])
+                  ("GG_OTU_2", "GG_OTU_5"), ("GG_OTU_4", "GG_OTU_5"),
+                  ("GG_OTU_2", "GG_OTU_6")])
 g["GG_OTU_1"]["GG_OTU_3"]['weight'] = 1.0
 g["GG_OTU_2"]["GG_OTU_5"]['weight'] = 1.0
 g["GG_OTU_4"]["GG_OTU_5"]['weight'] = -1.0
+g["GG_OTU_2"]["GG_OTU_6"]['weight'] = -1.0
 
 
-class TestIo(unittest.TestCase):
+class TestMeta(unittest.TestCase):
     """
     Tests IO methods.
     Warning: most of these functions are to interact with a local database named test.
@@ -293,8 +298,8 @@ class TestIo(unittest.TestCase):
 
     def test_start_metastats(self):
         """
-        Tests if the import_networks function reads the correct database file,
-        and imports the network file, by querying the networks table.
+        Tests if the stat_networks function reads the correct database file,
+        and agglomerates the network file, by querying the networks table.
         :return:
         """
         conn_object = BiomConnection()
@@ -302,100 +307,112 @@ class TestIo(unittest.TestCase):
         conn_object.add_biom(testbiom, 'test')
         conn_object = IoConnection()
         conn_object.add_network(network=g, name='g', study='test')
-        os.remove("test.graphml")
+        start_metastats(level='Family', weight=False, networks=['g'])
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT studyID "
-                    "FROM networks "
-                    "LIMIT 1;")
+        cur.execute("SELECT node_num "
+                    "FROM networks WHERE networks.networkid = %s"
+                    "LIMIT 1;", vars=('Genus_g',))
         result = cur.fetchall()
         cur.close()
         conn.close()
         conn_object.delete_tables()
-        self.assertEqual(result[0][0], 'test')
+        self.assertEqual(result[0][0], 5)
 
-    def test_import_network_edge(self):
+    def test_agglomerate_networks(self):
         """
-        Tests if the import_network function reads the correct database file,
-        and imports the network file, by querying the edges table.
+        Tests if the agglomerate_networks function agglomerates the test file
+        so that only 3 nodes and 3 edges remain.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_summary(('test', 2, 5))
-        nx.write_graphml(g, path="test.graphml")
-        import_networks("test.graphml")
-        os.remove("test.graphml")
+        conn_object.add_biom(testbiom, 'test')
+        conn_object = IoConnection()
+        conn_object.add_network(network=g, name='g', study='test')
+        conn_object = MetaConnection()
+        conn_object.agglomerate_networks(level='Family', weight=False, networks=['g'])
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT source, target "
-                    "FROM edges "
-                    "LIMIT 2;")
+        cur.execute("SELECT node_num "
+                    "FROM networks WHERE networks.networkid = %s"
+                    "LIMIT 1;", vars=('Family_g',))
         result = cur.fetchall()
         cur.close()
         conn.close()
         conn_object.delete_tables()
-        self.assertCountEqual(result,
-                              [("GG_OTU_1", "GG_OTU_2"),
-                                ("GG_OTU_2", "GG_OTU_5")])
+        self.assertEqual(result[0][0], 3)
 
-    def test_import_network_mapping(self):
+    def test_get_pairlist(self):
         """
-        Tests if the IoConnection uses the mapping dict.
+        Tests if the pair list is returned correctly,
+        with a pair being 2 edges with matching partners at the specified taxonomic level.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_summary(('banana', 2, 5))
-        nx.write_graphml(g, path="test.graphml")
-        import_networks("test.graphml", mapping={"test": "banana"})
-        os.remove("test.graphml")
-        conn = psycopg2.connect(**{"host": "localhost",
-                                   "database": "test",
-                                   "user": "test",
-                                   "password": "test"})
-        cur = conn.cursor()
-        cur.execute("SELECT studyID "
-                    "FROM networks "
-                    "LIMIT 1;")
-        result = cur.fetchall()
-        cur.close()
-        conn.close()
+        conn_object.add_biom(testbiom, 'test')
+        conn_object = IoConnection()
+        conn_object.add_network(network=g, name='g', study='test')
+        conn_object = MetaConnection()
+        pair = conn_object.get_pairlist(level='Family', weight=False, network='g')
         conn_object.delete_tables()
-        self.assertEqual(result[0][0], 'banana')
+        self.assertCountEqual(pair[0], ['GG_OTU_1', 'GG_OTU_4'])
 
-    def test_import_network_source(self):
+    def test_get_pairlist_weight_noresults(self):
         """
-        Tests if the IoConnection uses the source dict.
+        Tests if the pair is not returned when weight is set to True.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_summary(('banana', 2, 5))
-        nx.write_graphml(g, path="test.graphml")
-        import_networks("test.graphml", sources={"test": "banana"})
-        os.remove("test.graphml")
-        conn = psycopg2.connect(**{"host": "localhost",
-                                   "database": "test",
-                                   "user": "test",
-                                   "password": "test"})
-        cur = conn.cursor()
-        cur.execute("SELECT networkID "
-                    "FROM networks "
-                    "LIMIT 1;")
-        result = cur.fetchall()
-        cur.close()
-        conn.close()
+        conn_object.add_biom(testbiom, 'test')
+        conn_object = IoConnection()
+        conn_object.add_network(network=g, name='g', study='test')
+        conn_object = MetaConnection()
+        pair = conn_object.get_pairlist(level='Family', weight=True, network='g')
         conn_object.delete_tables()
-        self.assertEqual(result[0][0], 'test')
+        self.assertEqual(len(pair), 0)
 
-    def test_IoConnection(self):
+    def test_get_pairlist_weight_esults(self):
+        """
+        Tests if the pair is returned when weight is set to True and edge weights set to the same. .
+        :return:
+        """
+        conn_object = BiomConnection()
+        conn_object.create_tables()
+        conn_object.add_biom(testbiom, 'test')
+        conn_object = IoConnection()
+        f = g.copy(as_view=False)
+        f.edges[("GG_OTU_4","GG_OTU_5")]['weight'] = 1.0
+        conn_object.add_network(network=f, name='g', study='test')
+        conn_object = MetaConnection()
+        pair = conn_object.get_pairlist(level='Family', weight=True, network='g')
+        conn_object.delete_tables()
+        self.assertEqual(len(pair), 3)
+
+    def test_get_taxlist(self):
+        """
+        Tests if the matching taxa with same taxonomy at Family level are returned.
+        :return:
+        """
+        conn_object = BiomConnection()
+        conn_object.create_tables()
+        conn_object.add_biom(testbiom, 'test')
+        conn_object = IoConnection()
+        conn_object.add_network(network=g, name='g', study='test')
+        conn_object = MetaConnection()
+        pair = conn_object.get_taxlist(level='Family', network='g')
+        conn_object.delete_tables()
+        self.assertCountEqual(pair, ['GG_OTU_3', 'GG_OTU_4', 'GG_OTU_6'])
+
+    def test_MetaConnection(self):
         """
         Tests if the IoConnection can be successfully initialized,
         with the correct config parameters.
@@ -405,11 +422,11 @@ class TestIo(unittest.TestCase):
                        'database': 'test',
                        'user': 'test',
                        'password': 'test'}
-        conn = IoConnection()
+        conn = MetaConnection()
         read_config = conn.config
         self.assertTrue(test_config == read_config)
 
-    def test_add_network(self):
+    def test_copy_network(self):
         """
         Tests if the network file is added
         to the database.
@@ -417,130 +434,133 @@ class TestIo(unittest.TestCase):
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_biom(testbiom, 'banana')
+        conn_object.add_biom(testbiom, 'test')
         conn_object = IoConnection()
-        conn_object.add_network(g, 'banana', 'banana')
+        conn_object.add_network(network=g, name='g', study='test')
+        conn_object = MetaConnection()
+        conn_object.copy_network(source_network='g', new_network='f')
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT * from edges;")
+        cur.execute("SELECT networkID "
+                    "FROM networks WHERE networks.networkid = %s"
+                    "LIMIT 1;", vars=('f',))
         result = cur.fetchall()
-        # 3 edges in g
         cur.close()
         conn.close()
         conn_object.delete_tables()
-        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0][0], 'f')
 
-    def test_add_network_node(self):
+    def test_agglomerate_taxa(self):
         """
-        Tests whether a row is added to the networks table.
+        Tests whether two taxa are merged into one node.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_biom(testbiom, 'potato')
+        conn_object.add_biom(testbiom, 'test')
         conn_object = IoConnection()
-        conn_object.add_network_node(values=('potato', 'potato', 5, 20))
+        conn_object.add_network(network=g, name='g', study='test')
+        conn_object = MetaConnection()
+        conn_object.agglomerate_taxa(['GG_OTU_1', 'GG_OTU_2'], network='g', level='Class')
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT * from networks;")
+        cur.execute("SELECT source, target "
+                    "FROM edges WHERE edges.networkid = %s;", vars=('g',))
         result = cur.fetchall()
         cur.close()
         conn.close()
         conn_object.delete_tables()
-        self.assertEqual(result[0], ('potato', 'potato', 5, 20))
+        result = list(flatten(result))
+        removed = {"GG_OTU_1", "GG_OTU_2"}
+        self.assertEqual(len(removed.intersection(result)), 0)
 
-    def test_add_edge(self):
+    def test_agglomerate_pair(self):
         """
-        Tests whether a row is added to the edge table.
+        Tests whether two edges are merged into a single edge,
+        so that OTU 1 and 3 are removed.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_biom(testbiom, 'banana')
+        conn_object.add_biom(testbiom, 'test')
         conn_object = IoConnection()
-        conn_object.add_network_node(values=("banana", "banana", 2, 3))
-        conn_object.add_edge(values=("banana", "GG_OTU_1", "GG_OTU_2", 0.3))
+        conn_object.add_network(network=g, name='g', study='test')
+        conn_object = MetaConnection()
+        conn_object.agglomerate_pair((["GG_OTU_1", "GG_OTU_2"],
+                                      ["GG_OTU_3", "GG_OTU_5"], 1),
+                                     network='g', level='Class')
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT * from edges;")
+        cur.execute("SELECT source, target "
+                    "FROM edges WHERE edges.networkid = %s;", vars=('g',))
         result = cur.fetchall()
         cur.close()
         conn.close()
         conn_object.delete_tables()
-        self.assertEqual(result[0], ("banana", "GG_OTU_1", "GG_OTU_2", 0.3))
+        removed = {"GG_OTU_1", "GG_OTU_3"}
+        self.assertEqual(len(removed.intersection(result)), 0)
 
-    def test_add_edges(self):
+    def test_create_agglom(self):
         """
-        Tests whether new rows are added to the edges table.
+        Tests whether a new agglomerated node is created with intact taxonomy.
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_biom(testbiom, 'banana')
+        conn_object.add_biom(testbiom, 'test')
         conn_object = IoConnection()
-        conn_object.add_network_node(values=("banana", "banana", 2, 3))
-        conn_object.add_edge(values=[("banana", "GG_OTU_1", "GG_OTU_2", 0.3),
-                                     ("banana", "GG_OTU_3", "GG_OTU_5", -0.8)])
+        conn_object.add_network(network=g, name='g', study='test')
+        conn_object = MetaConnection()
+        uid = conn_object.create_agglom(parent="GG_OTU_1", level="Family")
         conn = psycopg2.connect(**{"host": "localhost",
                                    "database": "test",
                                    "user": "test",
                                    "password": "test"})
         cur = conn.cursor()
-        cur.execute("SELECT * from edges;")
+        cur.execute("SELECT Family "
+                    "FROM taxonomy WHERE taxonomy.taxon = %s;", vars=(uid,))
         result = cur.fetchall()
         cur.close()
         conn.close()
         conn_object.delete_tables()
-        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0][0], 'f__Enterobacteriaceae')
 
-    def test_edge_error(self):
+    def test_agglomerate_network_phylumloop(self):
         """
-        Tests if the query correctly reports an error
-        when network data is not present
+        Tests whether the network agglomeration also works up to Phylum level.
+        Note: need to check selfloops.
+
         :return:
         """
         conn_object = BiomConnection()
         conn_object.create_tables()
-        conn_object.add_biom(testbiom, 'banana')
+        conn_object.add_biom(testbiom, 'test')
         conn_object = IoConnection()
-        self.assertRaises(psycopg2.Error, conn_object.add_edge(
-            values=('apple', 'Streptococcus', 'Sample1', 0.5)),
-        )
-        # long format table of 5 * 6 observations
+        conn_object.add_network(network=g, name='g', study='test')
+        conn_object = MetaConnection()
+        conn_object.agglomerate_networks(level='Phylum', weight=False, networks=['g'])
+        conn = psycopg2.connect(**{"host": "localhost",
+                                   "database": "test",
+                                   "user": "test",
+                                   "password": "test"})
+        cur = conn.cursor()
+        cur.execute("SELECT node_num "
+                    "FROM networks WHERE networks.networkid = %s"
+                    "LIMIT 1;", vars=('Phylum_g',))
+        result = cur.fetchall()
+        cur.close()
+        conn.close()
         conn_object.delete_tables()
-
-    def test_export_network(self):
-        """
-        Tests whether the network can be exported from the database.
-        :return:
-        """
-        conn_object = BiomConnection()
-        conn_object.create_tables()
-        conn_object.add_biom(testbiom, 'banana')
-        conn_object = IoConnection()
-        conn_object.add_network(g, 'banana', 'banana')
-        network = conn_object.export_network(name='banana')
-        conn_object.delete_tables()
-        self.assertEqual(len(network.edges), 3)
-
-    def test_read_network_extension(self):
-        """
-        Tests whether the network can be read from a file.
-        :return:
-        """
-        nx.write_graphml(g, path="test.graphml")
-        graph = _read_network_extension("test.graphml")
-        os.remove("test.graphml")
-        self.assertEqual(len(graph.edges), 3)
+        self.assertEqual(result[0][0], 3)
 
 
 if __name__ == '__main__':

@@ -13,6 +13,7 @@ import sys
 from uuid import uuid4
 import logging.handlers
 from masq.scripts.utils import ParentConnection
+from pandas.core.common import flatten
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -54,8 +55,8 @@ def start_metastats(level, networks=None,
     level_id = tax_list.index(level.capitalize())
     for level in range(0, level_id + 1):
         logger.info("Checking " + tax_list[level] + " level...")
-        networks = MetaConnection.agglomerate_networks(level=tax_list[level],
-                                                       weight=weight, networks=networks)
+        networks = conn.agglomerate_networks(level=tax_list[level],
+                                             weight=weight, networks=networks)
 
 
 class MetaConnection(ParentConnection):
@@ -144,14 +145,20 @@ class MetaConnection(ParentConnection):
                         # this rewires the network
                         tax_nodes = self.get_taxlist(level=level, network=network)
                         if tax_nodes:
-                            tax_nodes = tax_nodes[0]['p']
-                            self.agglomerate_taxa(tax_nodes, level=level, weight=weight)
+                            self.agglomerate_taxa(tax_nodes, level=level, network=network)
                         else:
                             stop_condition = True
-                    num = self.value_query("SELECT count(*) FROM edges WHERE edges.networkID=%s",
-                                           values=(network,), fetch=True)
+                    edge_num = self.value_query("SELECT count(*) FROM edges WHERE edges.networkID=%s",
+                                                values=(network,), fetch=True)[0][0]
+                    self.value_query("UPDATE networks SET edge_num=" + str(edge_num) +
+                                     " WHERE networks.networkid=%s", values=(network,))
+                    node_num = self.value_query("SELECT source, target FROM edges WHERE edges.networkID=%s",
+                                                 values=(network,), fetch=True)
+                    node_num = len(set(flatten(node_num)))
+                    self.value_query("UPDATE networks SET node_num=" + str(node_num) +
+                                     " WHERE networks.networkid=%s", values=(network,))
                     logger.info("The agglomerated network " + network +
-                                " contains " + str(num[0][0]) + " edges.")
+                                " contains " + str(node_num) + " nodes and " + str(edge_num) + " edges.")
         except Exception:
             logger.error("Could not agglomerate edges to higher taxonomic levels. \n", exc_info=True)
         return new_networks
@@ -196,33 +203,43 @@ class MetaConnection(ParentConnection):
                            " as target, sign(WEIGHT) FROM copy as e " \
                            "JOIN taxonomy as p ON e.source = p.taxon " \
                            "JOIN taxonomy as q on e.target = q.taxon " \
+                           "WHERE p." + level + \
+                           " IS NOT NULL AND q." + level + " IS NOT NULL " \
                            "GROUP BY p." + level + ", q." + level + \
-                           ", SIGN(e.weight) HAVING COUNT(*) > 1 LIMIT 1;"
+                           ", SIGN(e.weight) " \
+                           "HAVING COUNT(*) > 1 LIMIT 1;"
         else:
             agglom_query = "SELECT string_agg(source::varchar, ','), " \
                            "string_agg(target::varchar, ','), p." + level + \
                            " as source, q." + level + " as target FROM copy as e " \
                            "JOIN taxonomy as p ON e.source = p.taxon " \
                            "JOIN taxonomy as q on e.target = q.taxon " \
+                           "WHERE p." + level + \
+                           " IS NOT NULL AND q." + level + " IS NOT NULL " \
                            "GROUP BY p." + level + ", q." + level + \
-                           " HAVING COUNT(*) > 1 LIMIT 1;"
+                           " HAVING COUNT(*) > 1 " \
+                            "LIMIT 1;"
         results = self.value_query(agglom_query, values=(network,), fetch=True)
         self.query("DROP TABLE copy;")
-        sources = results[0][0].split(',')
-        targets = results[0][1].split(',')
-        if weight:
-            weight = results[0][4]
+        if len(results) > 0:
+            sources = results[0][0].split(',')
+            targets = results[0][1].split(',')
+            if weight:
+                weight = results[0][4]
+            else:
+                weight = None
+                # need to check if sources and targets need to be swapped
+            check_query = "SELECT source, target from edges WHERE networkID = %s " \
+                          "AND source=%s AND target=%s"
+            for i in range(len(sources)):
+                checks = self.value_query(check_query, values=(network, sources[i], targets[i]), fetch=True)
+                if len(checks) == 0:
+                    sources[i] = results[0][1].split(',')[i]
+                    targets[i] = results[0][0].split(',')[i]
+            results = (sources, targets, weight)
         else:
-            weight = None
-            # need to check if sources and targets need to be swapped
-        check_query = "SELECT source, target from edges WHERE networkID = %s " \
-                      "AND source=%s AND target=%s"
-        for i in range(len(sources)):
-            checks = self.value_query(check_query, values=(network, sources[i], targets[i]), fetch=True)
-            if len(checks) == 0:
-                sources[i] = results[0][1].split(',')[i]
-                targets[i] = results[0][0].split(',')[i]
-        return sources, targets, weight
+            results = []
+        return results
 
     def get_taxlist(self, level, network):
         """
@@ -246,11 +263,16 @@ class MetaConnection(ParentConnection):
         agglom_query = "SELECT string_agg(source::varchar, ',') " \
                        "FROM (SELECT DISTINCT source FROM copy) as e " \
                        "JOIN taxonomy as p ON e.source = p.taxon " \
+                       "WHERE p." + level + \
+                       " IS NOT NULL "\
                        "GROUP BY p." + level + \
                        " HAVING COUNT(*) > 1 LIMIT 1;"
         results = self.value_query(agglom_query, values=(network,), fetch=True)
         self.query("DROP TABLE copy;")
-        sources = results[0][0].split(',')
+        if results:
+            sources = results[0][0].split(',')
+        else:
+            sources = []
         return sources
 
     def copy_network(self, source_network, new_network):

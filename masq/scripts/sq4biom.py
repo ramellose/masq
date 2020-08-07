@@ -108,11 +108,14 @@ class BiomConnection(ParentConnection):
         for tax in taxa:
             taxonomy = biomfile.metadata(id=tax, axis='observation')['taxonomy']
             # do not upload assignment if only prefix is available
-            for key in taxonomy:
-                if len(taxonomy[key].split('_')[-1]) == 1:
-                    taxonomy[key] = None
+            clean_tax = list()
+            for val in taxonomy:
+                if len(val.split('_')[-1]) == 0:
+                    clean_tax.append(None)
+                else:
+                    clean_tax.append(val)
             values = [tax, name]
-            values.extend(taxonomy)
+            values.extend(clean_tax)
             # last values may be removed if taxonomy is unavailable
             while len(values) < 9:
                 values.append(None)
