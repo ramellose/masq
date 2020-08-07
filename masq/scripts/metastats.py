@@ -10,8 +10,6 @@ __status__ = 'Development'
 __license__ = 'Apache 2.0'
 
 import sys
-import os
-import networkx as nx
 from uuid import uuid4
 import logging.handlers
 from masq.scripts.utils import ParentConnection
