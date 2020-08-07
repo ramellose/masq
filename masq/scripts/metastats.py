@@ -340,9 +340,15 @@ class MetaConnection(ParentConnection):
                                      "VALUES (%s,%s,%s,%s)",
                                      values=(network, new, partner[0], partner[1]))
 
-
-
     def create_agglom(self, parent, level):
+        """
+        When given a parent node, a new node is created with shared taxonomy up
+        to the specified level.
+
+        :param parent: Node or OTU label of taxon in taxonomy table.
+        :param level: Taxonomic level
+        :return:
+        """
         uid = str(uuid4())
         tax_levels = ['Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species']
         tax_id = tax_levels.index(level)
