@@ -29,7 +29,7 @@ To install _masq_, run:
 pip install git+https://github.com/ramellose/masq.git
 ```
 
-If you have Python 3 and 2 installed and run Windows, you may need this command:
+If you have both Python 2.7 and Python 3 installed, you may need to change the command to this:
 ```
 python3 -m pip install git+https://github.com/ramellose/masq.git
 ```
@@ -48,11 +48,6 @@ Additionally, the _metastats_ and _netstats_ modules contain scripts with querie
 These are currently not supported by the CLI, only by the API.
 
 For viewing PostgreSQL databases, I recommend [HeidiSQL](https://www.heidisql.com/).
-
-If you have both Python 2.7 and Python 3 installed, you may need to change the command to this:
-```
-python3 -m pip install git+https://github.com/ramellose/masq.git
-```
 
 ### Contributions
 
